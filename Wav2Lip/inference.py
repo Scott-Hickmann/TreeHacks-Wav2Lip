@@ -8,17 +8,18 @@ import torch, face_detection
 from models import Wav2Lip
 import platform
 import uuid
+import gc
 
 img_size = 96
 face_det_batch_size = 16
 pads = [0, 10, 0, 0]
-wav2lip_batch_size = 128
+wav2lip_batch_size = 64
 nosmooth = False
 static = False
 box = [-1, -1, -1, -1]
 crop = [0, -1, 0, -1]
 rotate = False
-resize_factor = 1
+resize_factor = 3
 fps = 10
 checkpoint_path = "checkpoints/wav2lip.pth"
 
@@ -131,6 +132,15 @@ def _load(checkpoint_path):
 								map_location=lambda storage, loc: storage)
 	return checkpoint
 
+# global_model = Wav2Lip()
+# print("Load checkpoint from: {}".format(checkpoint_path))
+# checkpoint = _load(checkpoint_path)
+# s = checkpoint["state_dict"]
+# new_s = {}
+# for k, v in s.items():
+# 	new_s[k.replace('module.', '')] = v
+# global_model.load_state_dict(new_s)
+
 def load_model(path):
 	model = Wav2Lip()
 	print("Load checkpoint from: {}".format(path))
@@ -140,9 +150,11 @@ def load_model(path):
 	for k, v in s.items():
 		new_s[k.replace('module.', '')] = v
 	model.load_state_dict(new_s)
-
 	model = model.to(device)
 	return model.eval()
+
+	# model = global_model.to(device)
+	# return model.eval()
 
 def infer(face, audiofile, outfile):
 	tmp_wav = f'temp/temp-{uuid.uuid1()}.wav'
@@ -214,30 +226,30 @@ def infer(face, audiofile, outfile):
 	batch_size = wav2lip_batch_size
 	gen = datagen(full_frames.copy(), mel_chunks)
 
-	for i, (img_batch, mel_batch, frames, coords) in enumerate(tqdm(gen, 
-											total=int(np.ceil(float(len(mel_chunks))/batch_size)))):
-		if i == 0:
-			model = load_model(checkpoint_path)
-			print ("Model loaded")
+	with torch.no_grad():
+		for i, (img_batch, mel_batch, frames, coords) in enumerate(tqdm(gen, 
+												total=int(np.ceil(float(len(mel_chunks))/batch_size)))):
+			if i == 0:
+				model = load_model(checkpoint_path)
+				print("Model loaded")
 
-			frame_h, frame_w = full_frames[0].shape[:-1]
-			out = cv2.VideoWriter(tmp_result, 
-									cv2.VideoWriter_fourcc(*'DIVX'), fps, (frame_w, frame_h))
+				frame_h, frame_w = full_frames[0].shape[:-1]
+				out = cv2.VideoWriter(tmp_result, 
+										cv2.VideoWriter_fourcc(*'DIVX'), fps, (frame_w, frame_h))
 
-		img_batch = torch.FloatTensor(np.transpose(img_batch, (0, 3, 1, 2))).to(device)
-		mel_batch = torch.FloatTensor(np.transpose(mel_batch, (0, 3, 1, 2))).to(device)
+			img_batch = torch.FloatTensor(np.transpose(img_batch, (0, 3, 1, 2))).to(device)
+			mel_batch = torch.FloatTensor(np.transpose(mel_batch, (0, 3, 1, 2))).to(device)
 
-		with torch.no_grad():
 			pred = model(mel_batch, img_batch)
 
-		pred = pred.cpu().numpy().transpose(0, 2, 3, 1) * 255.
-		
-		for p, f, c in zip(pred, frames, coords):
-			y1, y2, x1, x2 = c
-			p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
+			pred = pred.cpu().numpy().transpose(0, 2, 3, 1) * 255.
+			
+			for p, f, c in zip(pred, frames, coords):
+				y1, y2, x1, x2 = c
+				p = cv2.resize(p.astype(np.uint8), (x2 - x1, y2 - y1))
 
-			f[y1:y2, x1:x2] = p
-			out.write(f)
+				f[y1:y2, x1:x2] = p
+				out.write(f)
 
 	out.release()
 
@@ -245,3 +257,6 @@ def infer(face, audiofile, outfile):
 	subprocess.call(command, shell=platform.system() != 'Windows')
 	subprocess.call(f'rm -f {tmp_wav}', shell=platform.system() != 'Windows')
 	subprocess.call(f'rm -f {tmp_result}', shell=platform.system() != 'Windows')
+
+	gc.collect()
+	torch.cuda.empty_cache()

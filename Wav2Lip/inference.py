@@ -260,3 +260,15 @@ def infer(face, audiofile, outfile):
 
 	gc.collect()
 	torch.cuda.empty_cache()
+	print("Memory allocated", torch.cuda.max_memory_allocated())
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser()
+
+	parser.add_argument('--face', required=True)
+	parser.add_argument('--audiofile', required=True)
+	parser.add_argument("--outfile", required=True)
+
+	args = parser.parse_args()
+
+	infer(face=args.face, audiofile=args.audiofile, outfile=args.outfile)

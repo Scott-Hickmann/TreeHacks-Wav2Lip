@@ -20,8 +20,9 @@ def animate():
     f = open(audio_file, 'wb')
     f.write(request.get_data("audio_data"))
     f.close()
-    result_file = f"results/{name}.mp4"
+    result_file = f"results/{name}-{shortuuid.uuid()}.mp4"
     infer(face=f'input/{name}.mp4', audiofile=audio_file, outfile=result_file)
+    # subprocess.run(['python', 'inference.py', '--face', f'input/{name}.mp4', '--audiofile', audio_file, '--outfile', result_file], capture_output=True, text=True)
     subprocess.call(f'rm -f {audio_file}', shell=platform.system() != 'Windows')
     data = ""
     @after_this_request

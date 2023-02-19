@@ -7,6 +7,7 @@ import shortuuid
 import platform
 import uuid
 import os
+from inference import infer
 
 app = Flask(__name__)
 CORS(app)
@@ -20,7 +21,7 @@ def animate():
     f.write(request.get_data("audio_data"))
     f.close()
     result_file = f"results/{name}.mp4"
-    process = subprocess.run(['python', 'inference.py', '--checkpoint_path',  'checkpoints/wav2lip.pth', '--face', f'input/{name}.mp4', '--audio', audio_file, '--outfile', result_file], capture_output=True, text=True)
+    infer(face=f'input/{name}.mp4', audiofile=audio_file, outfile=result_file)
     subprocess.call(f'rm -f {audio_file}', shell=platform.system() != 'Windows')
     data = ""
     @after_this_request
